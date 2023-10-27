@@ -2,7 +2,6 @@
 
 #include "sprite_renderer.hpp"
 #include "resource_manager.hpp"
-#include "ball_object.hpp"
 
 SpriteRenderer *Renderer;
 
@@ -59,6 +58,7 @@ void Game::Init() {
 
 void Game::Update(float dt) {
   Ball->Move(dt, Width);
+  DoCollisions();
 }
 
 void Game::ProcessInput(float dt) {
@@ -91,4 +91,30 @@ void Game::Render() {
     Player->Draw(*Renderer);
     Ball->Draw(*Renderer);
   }
+}
+
+void Game::DoCollisions() {
+  for (GameObject &box : Levels[Level].Bricks) {
+    if (!box.Destroyed && !box.IsSolid) {
+      if (CheckCollision(*Ball, box)) {
+        box.Destroyed = true;
+      }
+    }
+  }
+}
+
+bool Game::CheckCollision(BallObject &ball, GameObject &obj) {
+  glm::vec2 center(ball.Position + ball.Radius);
+
+  glm::vec2 aabb_half_extents(obj.Size / 2.0f);
+  glm::vec2 aabb_center(obj.Position + aabb_half_extents);
+
+  glm::vec2 difference = center - aabb_center;
+  glm::vec2 clamped = glm::clamp(difference, -aabb_half_extents, aabb_half_extents);
+
+  glm::vec2 closest = aabb_center + clamped;
+
+  difference = closest - center;
+
+  return glm::length(difference) < ball.Radius;
 }

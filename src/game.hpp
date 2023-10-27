@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 
 #include "game_level.hpp"
+#include "ball_object.hpp"
 
 enum GameState {
   GAME_ACTIVE,
@@ -26,4 +27,8 @@ class Game {
     void ProcessInput(float dt);
     void Update(float dt);
     void Render();
+    void DoCollisions();
+
+  private:
+    bool CheckCollision(BallObject &ball, GameObject &obj);
 };
