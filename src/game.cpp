@@ -59,6 +59,36 @@ void Game::Init() {
 void Game::Update(float dt) {
   Ball->Move(dt, Width);
   DoCollisions();
+
+  if (Ball->Position.y >= Height) {
+    ResetLevel();
+    ResetPlayer();
+  }
+}
+
+void Game::ResetLevel() {
+  std::string file;
+  switch (Level) {
+    case 0:
+      file = "levels/one.lvl";
+      break;
+    case 1:
+      file = "levels/two.lvl";
+      break;
+    case 2:
+      file = "levels/three.lvl";
+      break;
+    case 3:
+      file = "levels/four.lvl";
+      break;
+  }
+  Levels[Level].Load(file.c_str(), Width, Height / 2);
+}
+
+void Game::ResetPlayer() {
+  Player->Position = glm::vec2(Width / 2.0f - PLAYER_SIZE.x / 2.0f, Height - PLAYER_SIZE.y);
+  Ball->Stuck = true;
+  Ball->Position = Player->Position + glm::vec2(PLAYER_SIZE.x / 2.0f - BALL_RADIUS, -BALL_RADIUS * 2.0f);
 }
 
 void Game::ProcessInput(float dt) {
@@ -94,16 +124,56 @@ void Game::Render() {
 }
 
 void Game::DoCollisions() {
+  // brick collisions
   for (GameObject &box : Levels[Level].Bricks) {
-    if (!box.Destroyed && !box.IsSolid) {
-      if (CheckCollision(*Ball, box)) {
-        box.Destroyed = true;
+    if (!box.Destroyed) {
+      Collision collision = CheckCollision(*Ball, box);
+      if (std::get<0>(collision)) {
+        if (!box.IsSolid)
+          box.Destroyed = true;
+
+        Direction dir = std::get<1>(collision);
+        glm::vec2 diff_vector = std::get<2>(collision);
+        if (dir == LEFT || dir == RIGHT) {
+          Ball->Velocity.x = -Ball->Velocity.x;
+
+          float penetration = Ball->Radius - std::abs(diff_vector.x);
+
+          if (dir == LEFT)
+            Ball->Position.x += penetration;
+          else
+            Ball->Position.x -= penetration;
+        }
+        else {
+          Ball->Velocity.y = -Ball->Velocity.y;
+
+          float penetration = Ball->Radius - std::abs(diff_vector.y);
+
+          if (dir == UP)
+            Ball->Position.y -= penetration;
+          else
+            Ball->Position.y += penetration;
+        }
       }
     }
   }
+
+  // player collisions
+  Collision result = CheckCollision(*Ball, *Player);
+  if (!Ball->Stuck && std::get<0>(result)) {
+    float centerBoard = Player->Position.x + Player->Size.x / 2.0f;
+    float distance = (Ball->Position.x + Ball->Radius) - centerBoard;
+    float percentage = distance / (Player->Size.x / 2.0f);
+
+    float strength = 2.0f;
+    glm::vec2 oldVelocity = Ball->Velocity;
+    Ball->Velocity.x = INITIAL_BALL_VELOCITY.x * percentage * strength;
+    Ball->Velocity.y = -1.0f * std::abs(Ball->Velocity.y);
+    Ball->Velocity = glm::normalize(Ball->Velocity) * glm::length(oldVelocity);
+  }
 }
 
-bool Game::CheckCollision(BallObject &ball, GameObject &obj) {
+Collision Game::CheckCollision(BallObject &ball, GameObject &obj) {
   glm::vec2 center(ball.Position + ball.Radius);
 
   glm::vec2 aabb_half_extents(obj.Size / 2.0f);
@@ -116,5 +186,28 @@ bool Game::CheckCollision(BallObject &ball, GameObject &obj) {
 
   difference = closest - center;
 
-  return glm::length(difference) < ball.Radius;
+  if (glm::length(difference) <= ball.Radius)
+    return std::make_tuple(true, VectorDirection(difference), difference);
+  else
+    return std::make_tuple(false, UP, glm::vec2(0.0f, 0.0f));
+}
+
+Direction VectorDirection(glm::vec2 target) {
+  glm::vec2 compass[] = {
+    glm::vec2(0.0f, 1.0f),
+    glm::vec2(1.0f, 0.0f),
+    glm::vec2(0.0f, -1.0f),
+    glm::vec2(-1.0f, 0.0f),
+  };
+  float max = 0.0f;
+  unsigned int best_match = -1;
+
+  for (unsigned int i = 0; i < 4; i++) {
+    float dot_product = glm::dot(glm::normalize(target), compass[i]);
+    if (dot_product > max) {
+      max = dot_product;
+      best_match = i;
+    }
+  }
+  return (Direction)best_match;
 }
